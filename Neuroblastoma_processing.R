@@ -102,15 +102,18 @@ CombinePlots(plots=list(umap_10_05, umap_10_08, umap_10_1,
                         umap_50_05, umap_50_08, umap_50_1,
                         umap_100_05, umap_100_08, umap_100_1), ncol = 3)
 
+neuroblastoma1_50$seurat_clusters <- neuroblastoma1_50$RNA_snn_res.0.5
+neuroblastoma1_50@active.ident <- neuroblastoma1_50$RNA_snn_res.0.5
 #will be using 50PCs, res 0.5 clusters for all downstream stuff
 
-saveRDS(neuroblastoma1_50, file="Neuroblastoma1/neuroblastoma_1_50pcs.rds")
-neuroblastoma1_50@meta.data
+saveRDS(neuroblastoma1_50, file="")
 
 
+neuroblastoma1_50 <-readRDS("Neuroblastoma/Neuroblastoma1/neuroblastoma_1_50pcs.rds")
 #find all markers 
 neuroblastoma1_50@active.ident
-
+neuroblastoma1_50$seurat_clusters <- neuroblastoma1_50$RNA_snn_res.0.5
+neuroblastoma1_50@active.ident <- neuroblastoma1_50$RNA_snn_res.0.5
 all.markers <- FindAllMarkers(neuroblastoma1_50)
 a <-all.markers %>% group_by(cluster) %>% top_n(n = 2, wt = avg_logFC) 
 features_0_5 <- a$gene[1:12]
@@ -121,7 +124,7 @@ VlnPlot(neuroblastoma1_50, features = c("GNLY", "GZMB"))
 FeaturePlot(neuroblastoma1_50, features = features_0_5)
 FeaturePlot(neuroblastoma1_50, features = features_6_10)
 FeaturePlot(neuroblastoma1_50, features = features_11_12)
-FeaturePlot(neuroblastoma1_50, features = "TMSB4")
+FeaturePlot(neuroblastoma1_50, features = "PTPRC")
 
 genexp <-sort(Matrix::rowMeans(neuroblastoma1_50@assays$RNA@counts), decreasing = T)
 names(genexp)[1:10]
