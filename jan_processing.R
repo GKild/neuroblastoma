@@ -2,13 +2,50 @@ library(Matrix)
 library(MASS)
 library(dplyr)
 library(Seurat)
+library(ggplot2)
+library(glmnet)
+#function to do standard 10X processing in Seurat
+process_10x <- function(seurat_obj, npcs=50, res=1.0){
+  seurat_obj = NormalizeData(seurat_obj)
+  seurat_obj = ScaleData(seurat_obj)
+  seurat_obj = FindVariableFeatures(seurat_obj)
+  seurat_obj = RunPCA(seurat_obj,approx=FALSE)
+  seurat_obj = RunUMAP(seurat_obj,dims=seq(npcs))
+  seurat_obj = FindNeighbors(seurat_obj,dims=seq(npcs))
+  seurat_obj = FindClusters(seurat_obj,res=res)
+  return(seurat_obj)
+}
+
+#define params
+outdir = 'Jan_NB/split_objects/'
+npcs=50
+mtMax=0.2
+nGeneMin=300
+nCntsMin=500
+minCells=100
+#normal reference for LR
+adr <- readRDS("babyAdrenalRef/babyAdrenal2.RDS")
 #Processing Jan's data
 #Loading data
 load("Jan_NB/scRNAseq_NB_PMC_Full.RData")
 Jan_nb <- data
 rm(data)
-####split the data for separate processing, add metadata from relevant cells, save as rds objects.####
- 
+genes_10x <- read.table("Neuroblastoma1/4602STDY7685340/outs/filtered_gene_bc_matrices/GRCh38/genes.tsv", sep = "\t", header = F)
+#main matrix 
+mtx <- Jan_nb$data$counts
+#column metadata 
+meta_data <- Jan_nb$col.annot
+#calculate fraction of spikeins
+meta_data$spikeIn_fraction<- colSums(mtx[grep("^ERCC-",rownames(mtx)),])/colSums(mtx)
+#remove spikeins
+mtx <- mtx[-grep("^ERCC-",rownames(mtx)),]
+#calculate fraction of reads lost by using 10X ensembl IDs, and fraction of reads lost from  MT genes that are NOT in 10X. 
+mtx_10x <-mtx[which(rownames(mtx)%in%genes_10x$V1),]
+not_10x<-mtx[which(!rownames(mtx)%in%genes_10x$V1),]
+meta_data$reads_lost <-(colSums(mtx)-colSums(mtx_10x))/colSums(mtx)
+rownames(not_10x)<-Jan_nb$row.annot$gene[match(rownames(not_10x),Jan_nb$row.annot$ensemblId)]
+meta_data$mt_reads_lost <-colSums(not_10x[grep("^MT-",rownames(not_10x)),])/colSums(mtx)
+
 #get cols for each patient-sample. 
 patient_ids <-unique(Jan_nb$col.annot$PatientId)
 cells_each_sample <-sapply(patient_ids,function(x){
@@ -17,7 +54,7 @@ cells_each_sample <-sapply(patient_ids,function(x){
   })
 })
 
-cells_list <- list("NB039_Tumour_organoids_in_20perc_HP_(3D)"=cells_each_sample$NB039$`Tumour organoids in 20perc HP (3D)`,
+cells_list <- list("NB039_Tumour_organoids_in_20perc_HP_3D"=cells_each_sample$NB039$`Tumour organoids in 20perc HP (3D)`,
                    "NB039_Tumour_organoids_in_OM_WNT_RSPO_TGFb_inh"=cells_each_sample$NB039$`Tumour organoids in OM_WNT_RSPO_TGFb inh`,
                    "NB039_Tumour_organoids_in_OM_WNT_RSPO"=cells_each_sample$NB039$`Tumour organoids in OM _WNT_RSPO`, 
                    "NB060_Fresh_biopsy"=as.character(cells_each_sample$NB060), 
@@ -40,30 +77,64 @@ cells_list <- list("NB039_Tumour_organoids_in_20perc_HP_(3D)"=cells_each_sample$
                    "NB152_Tumour_organoids_P1"=cells_each_sample$NB152$`Tumour organoids P1`)
 
 
-#####make a seurat object with metadata for each sample######
-#get relevant cols for the mtx and meta, calc spike ins and add to meta, calc % reads in 10X genes and add to meta
-sapply(1:length(cells_list), function(x){
-  rel_mtx <- Jan_nb$data$counts[,which(colnames(Jan_nb$data$counts)%in%cells_list[[x]])]
-  rel_meta <- Jan_nb$col.annot[which(Jan_nb$col.annot$CellId%in%cells_list[[x]]),]
-  
-})
-x <- Jan_nb$data$counts[,which(colnames(Jan_nb$data$counts)%in%cells_list[[1]])]
-obj <- CreateSeuratObject(x)
+#add the unique sample to metadata 
 
-obj@assays 
+meta_data$unique_sample <- "sample"
+for (x in 1:length(cells_list)) {
+  meta_data$unique_sample[which(meta_data$CellId%in%cells_list[[x]])] <-names(cells_list[x])
+}
 
-#calculate fraction of reads from spike-ins
+# going to be working with only 10X from now on, so use mtx_10x,
+# convert to gene names, and force uniqueness on each rowname. 
+
+rownames(mtx_10x)<-genes_10x$V2[match(rownames(mtx_10x),genes_10x$V1)]
+rownames(mtx_10x) <- make.unique(rownames(mtx_10x))
+
+#add other QC metrics to metadata - mt frac, UMIs, nGenes with more than 0 reads
+meta_data$mt_fract <- colSums(mtx_10x[grep("^MT-",rownames(mtx_10x)),])/colSums(mtx_10x)
+meta_data$umi_count <- colSums(mtx_10x)
+meta_data$nFeatures <- colSums(mtx_10x>0)
+
+#train the LR model
+
+dat = adr@assays$RNA@counts
+dat = dat[rownames(dat) %in% rownames(mtx_10x),]
+fit = trainModel(dat,paste0('fAd',as.character(adr@active.ident)),maxCells=5000)
+
+#now process Seurat and run LR 
+
+srats=list()
+
+for (x in 1:length(cells_list)) {
+  message(names(cells_list[x]))
+  srats[[names(cells_list[x])]]=list()
+  each_sample = mtx_10x[,cells_list[[x]]]
+  each_meta = meta_data[cells_list[[x]],]
+  #avoid NAs in MTfract column - if NA, then total reads is 0 and will fail QC anyways
+  each_meta$mt_fract[is.na(each_meta$mt_fract)]=0
+  #which cells are passing QC
+  passed_cells = dplyr::filter(each_meta, mt_fract<mtMax, umi_count>nCntsMin, nFeatures>nGeneMin)
+  w =nrow(passed_cells)
+  message(sprintf("After filtering, keeping %d cells of %d",w,nrow(each_meta)))
+  if(w<minCells){
+    message(sprintf("Sample has only %d cells passing QC.  Too shit to continue.",w))
+    next
+  }
+  #create seurat object and add it into a list of Seurat objects
+  seurat_obj =CreateSeuratObject(each_sample[,passed_cells$CellId],meta.data=each_meta[passed_cells$CellId,])
+  srats[[names(cells_list[x])]] = process_10x(seurat_obj,npcs=npcs)
+  ps = predictSimilarity(fit,seurat_obj@assays$RNA@counts[rownames(seurat_obj@assays$RNA@counts)%in%rownames(dat),],
+                         classes=as.character(srats[[names(cells_list[x])]]@active.ident))
+  pdf(file.path(outdir,paste0(names(cells_list[x]),'.pdf')),width=14,height=14)
+  plot(DimPlot(srats[[names(cells_list[x])]],label=TRUE)+guides(colour=FALSE))
+  plot(FeaturePlot(srats[[names(cells_list[x])]],c('HBB','HBA1','PECAM1','PTPRC','EPCAM','PDGFRB')))
+  plot(FeaturePlot(srats[[names(cells_list[x])]],c('MYCN','SOX10','SOX2','PHOX2A','CHGB','PHOX2B')))
+  print(similarityHeatmap(ps,
+                          row_order = rownames(ps)[order(as.numeric(gsub('[A-Za-z]','',rownames(ps))))],
+                          column_order = colnames(ps)[order(as.numeric(gsub('[A-Za-z]','',colnames(ps))))]
+  ))
+  dev.off()
+}
 
 
-data$col.annot$spikeIn_fraction<- colSums(data$data$counts[grep("^ERCC-",rownames(data$data$counts)),])/colSums(data$data$counts)
-data$col.annot$spikeIn_fraction
 
-#remove spike-ins from the data
-
-Jan_nb_no_spikeins <- data
-Jan_nb_no_spikeins$data$counts <- Jan_nb_no_spikeins$data$counts[-grep("^ERCC-",rownames(Jan_nb_no_spikeins$data$counts)),]
-
-#convert matrix rownames from ensembl_id to HGNC gene symbol (NOT ID)
-rownames(Jan_nb_no_spikeins$data$counts)<-Jan_nb_no_spikeins$row.annot$gene[match(rownames(Jan_nb_no_spikeins$data$counts),Jan_nb_no_spikeins$row.annot$ensemblId)]
-#make rownames unique
-rownames(Jan_nb_no_spikeins$data$counts)<- make.unique(rownames(Jan_nb_no_spikeins$data$counts))
