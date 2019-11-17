@@ -136,5 +136,27 @@ for (x in 1:length(cells_list)) {
   dev.off()
 }
 
-
+rl_melted <- melt(meta_data, id.vars = c("unique_sample", "CellId"), measure.vars = c("reads_lost", "mt_reads_lost"))
+pdf('qc_metrics.pdf',width=21,height=14)
+gg = ggplot(rl_melted,aes(x=value, fill=variable)) +
+  geom_density(alpha=0.5) + 
+  ggtitle('Reads lost') +
+  facet_wrap(~unique_sample)
+plot(gg)
+gg=ggplot(meta_data, aes(x=mt_fract)) +
+  geom_density()+
+  ggtitle('Fraction of mitochondrial reads') +
+  facet_wrap(~unique_sample)
+plot(gg)
+gg=ggplot(meta_data, aes(x=log10(umi_count))) +
+  geom_density()+
+  ggtitle('Log10 UMI count') +
+  facet_wrap(~unique_sample)
+plot(gg)
+gg=ggplot(meta_data, aes(x=log10(nFeatures))) +
+  geom_density()+
+  ggtitle('Log10 nFeatures') +
+  facet_wrap(~unique_sample)
+plot(gg)
+dev.off()
 
