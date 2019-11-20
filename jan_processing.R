@@ -120,7 +120,7 @@ for (x in 1:length(cells_list)) {
     message(sprintf("Sample has only %d cells passing QC.  Too shit to continue.",w))
     next
   }
-  #create seurat object and add it into a list of Seurat objects
+  #create seurat object and add it into a list of Seurat objects, run LR, make a umap, some featureplots, and LR heatmap
   seurat_obj =CreateSeuratObject(each_sample[,passed_cells$CellId],meta.data=each_meta[passed_cells$CellId,])
   srats[[names(cells_list[x])]] = process_10x(seurat_obj,npcs=npcs)
   ps = predictSimilarity(fit,seurat_obj@assays$RNA@counts[rownames(seurat_obj@assays$RNA@counts)%in%rownames(dat),],
@@ -135,7 +135,7 @@ for (x in 1:length(cells_list)) {
   ))
   dev.off()
 }
-
+#make metadata plot
 rl_melted <- melt(meta_data, id.vars = c("unique_sample", "CellId"), measure.vars = c("reads_lost", "mt_reads_lost"))
 pdf('qc_metrics.pdf',width=21,height=14)
 gg = ggplot(rl_melted,aes(x=value, fill=variable)) +
