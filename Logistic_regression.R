@@ -232,3 +232,4 @@ getPopulationOffset = function(y){
   off = log(off/(1-off))
   return(rep(off,length(y)))
 }
+
