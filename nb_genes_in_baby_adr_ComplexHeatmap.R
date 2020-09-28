@@ -32,8 +32,8 @@ col_types <-factor(c("SCP trajectory", "SCP trajectory","SCP trajectory","SCP tr
                      "V.E.", "CD45+", "Mesenchyme", "Mesenchyme","Mesenchyme") ,
                    levels=c("SCP trajectory", "Proliferative cortex","Cortex", "Blood","V.E.", "CD45+", "Mesenchyme"))
 
-col_fun = colorRamp2(c(-4, 0, 4), c("purple", "black", "yellow"))
-col_fun(seq(-3, 3))
+col_fun = colorRamp2(c(-3,-2,-1,0,1,2,3), rev(brewer.pal(n = 7, name = "RdYlBu")))
+
 avg_exp_col=colorRamp2(c(0, 1), c("white", "blue")) 
 
 ha = rowAnnotation(avg_exp=anno_simple(rowMeans(adr@assays$RNA@data[somatic_nb_genes$gene,]), col=avg_exp_col))
@@ -41,10 +41,7 @@ ht =ComplexHeatmap::Heatmap(adr_scaled[somatic_nb_genes$gene,], name="mat", col=
                              column_order = colnames(adr_scaled[somatic_nb_genes$gene,]), row_names_side = "left", column_names_rot = 0,
                              column_names_side = "top", 
                              row_names_gp = gpar(fontsize = 10), show_row_dend = F, 
-                             column_split = col_types, column_title_gp = gpar(fontsize=12), left_annotation = ha, row_split = somatic_nb_genes$top_mut,
-                            row_names_max_width = max_text_width(
-                              rownames(adr@assays$RNA@data[somatic_nb_genes$gene,]), 
-                              gp = gpar(fontsize = 10)))
+                             column_split = col_types, column_title_gp = gpar(fontsize=12), left_annotation = ha, row_split = somatic_nb_genes$top_mut)
 
 exp_legend = Legend(title = "avg exp", col = avg_exp_col, at = c(0,0.5, 1), 
                     labels = c("0", "0.5", "1"))
