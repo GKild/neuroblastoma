@@ -33,7 +33,7 @@ defNumPCs=75
 
 load("Jan_NB/scRNAseq_NB_PMC_Full.RData")
 Jan_nb <- data
-genes_10x <- read.table("Neuroblastoma1/4602STDY7685340/outs/filtered_gene_bc_matrices/GRCh38/genes.tsv", sep = "\t", header = F)
+genes_10x <- read.table("/lustre/scratch119/realdata/mdt1/team274/ek12/Neuroblastoma/4602STDY7685340/outs/filtered_gene_bc_matrices/GRCh38/genes.tsv", sep = "\t", header = F)
 #main matrix 
 mtx <- Jan_nb$data$counts
 #column metadata 
@@ -136,5 +136,8 @@ VlnPlot(srat_tumour, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), n
 
 
 DimPlot(srat_tumour, cells.highlight=rownames(srat_tumour@meta.data)[which(srat_tumour@meta.data$nCount_RNA>10000)])
+sample_plate=sapply(unique(meta_data$unique_sample), function(x){unique(dplyr::filter(meta_data, unique_sample==x)$PlateId)})
 
-cbind()
+df <- ldply (sample_plate, data.frame)
+colnames(df)=c("sample", "plate")
+write.table(df, "sample_and_plate.txt", sep = "\t", row.names = F, col.names = T, quote = F)

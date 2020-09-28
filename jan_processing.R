@@ -24,13 +24,13 @@ nGeneMin=300
 nCntsMin=500
 minCells=100
 #normal reference for LR
-adr <- readRDS("babyAdrenalRef/babyAdrenal2.RDS")
+adr <- readRDS("/lustre/scratch117/casm/team274/my4/oldScratch/preProcessSCP/output/babyAdrenal2_Seurat.RDS")
 #Processing Jan's data
 #Loading data
 load("Jan_NB/scRNAseq_NB_PMC_Full.RData")
 Jan_nb <- data
 rm(data)
-genes_10x <- read.table("Neuroblastoma1/4602STDY7685340/outs/filtered_gene_bc_matrices/GRCh38/genes.tsv", sep = "\t", header = F)
+genes_10x <- read.table("/lustre/scratch119/realdata/mdt1/team274/ek12/Neuroblastoma/4602STDY7685340/outs/filtered_gene_bc_matrices/GRCh38/genes.tsv", sep = "\t", header = F)
 #main matrix 
 mtx <- Jan_nb$data$counts
 #column metadata 
@@ -99,7 +99,7 @@ meta_data$nFeatures <- colSums(mtx_10x>0)
 
 dat = adr@assays$RNA@counts
 dat = dat[rownames(dat) %in% rownames(mtx_10x),]
-fit = trainModel(dat,paste0('fAd',as.character(adr@active.ident)),maxCells=5000)
+fit = trainModel(dat,as.character(adr@active.ident),maxCells=5000)
 
 #now process Seurat and run LR 
 
@@ -131,7 +131,7 @@ for (x in 1:length(cells_list)) {
   plot(FeaturePlot(srats[[names(cells_list[x])]],c('MYCN','SOX10','SOX2','PHOX2A','CHGB','PHOX2B')))
   print(similarityHeatmap(ps,
                           row_order = rownames(ps)[order(as.numeric(gsub('[A-Za-z]','',rownames(ps))))],
-                          column_order = colnames(ps)[order(as.numeric(gsub('[A-Za-z]','',colnames(ps))))]
+                          column_order = c("10","17","11","7","19","0","8","1","2","4","6","12","13","5","16","14","18","3","9","15")
   ))
   dev.off()
 }

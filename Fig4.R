@@ -113,11 +113,10 @@ ggplot(de_of_de_pat, aes(x=reorder(gene, value), y=value))+geom_bar(stat="identi
         strip.background = element_blank(),
         panel.border = element_rect(colour = "black"),
         text=element_text(size = 12)) + labs( y ="% of samples above expression threshold", x = "Gene")
-
+above_log$qval=p.adjust(above)
 above_log=de_of_de_sorted[which(!rownames(de_of_de_sorted)%in%immune_sc),][which(abs(de_of_de_sorted[which(!rownames(de_of_de_sorted)%in%immune_sc),]$logFC)>1),]
-above_log=above_log[which(above_log$qvalue<0.05),]
+above_log=above_log[which(above_log$qval<0.05),]
 genes_for_kap=rownames(above_log)
-
 
 
 de_of_de_facet_tab=target_log2tpm[genes_for_kap, all$TARGET_SHORT]
